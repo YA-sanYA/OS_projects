@@ -19,14 +19,14 @@ int main()
 
     std::vector<employee> database(n);
 
-    createBinaryFile(filename, database); // из pipe_utils или file_utils
+    createBinaryFile(filename, database);
     printFile(filename);
 
     int clientCount;
     std::cout << "Enter number of clients: ";
     std::cin >> clientCount;
 
-    startClients(clientCount); // CreateProcess()
+    startClients(clientCount);
 
     LockManager lockManager;
 

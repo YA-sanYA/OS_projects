@@ -58,10 +58,9 @@ void startClients(int clientCount)
         STARTUPINFOA si = { sizeof(si) };
         PROCESS_INFORMATION pi;
 
-        // пример, что client.exe лежит рядом
         if (!CreateProcessA(
-            "Client.exe", nullptr, nullptr, nullptr, FALSE,
-            0, nullptr, nullptr, &si, &pi))
+            "..\\Client\\Client.exe", nullptr, nullptr, nullptr, FALSE,
+            CREATE_NEW_CONSOLE, nullptr, nullptr, &si, &pi))
         {
             std::cout << "Failed to start client " << i << "\n";
             continue;
