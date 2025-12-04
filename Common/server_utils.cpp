@@ -11,68 +11,105 @@ employee* findEmployee(std::vector<employee>& database, int id)
     return nullptr;
 }
 
-void handleClient(HANDLE hPipe,
-    std::vector<employee>& database,
-    LockManager& lockManager)
+void handleClient(HANDLE hPipe, std::vector<employee>& database, LockManager& lockManager)
 {
     Request req;
     Response res;
+    int lockedId = -1;
+    bool isWriteLock = false;
 
     while (true)
     {
         DWORD readBytes = 0;
+        BOOL result = ReadFile(hPipe, &req, sizeof(req), &readBytes, NULL);
 
-        if (!ReadFile(hPipe, &req, sizeof(req), &readBytes, NULL))
+        if (!result || readBytes == 0 || req.type == RequestType::EXIT)
+        {
+            if (lockedId != -1) {
+                if (isWriteLock) lockManager.unlockForWrite(lockedId);
+                else lockManager.unlockForRead(lockedId);
+            }
             break;
+        }
 
-        if (req.type == RequestType::EXIT)
-            break;
-
-        if (req.type == RequestType::READ)
+        // 1. ЗАПРОС НА ЧТЕНИЕ
+        if (req.type == RequestType::START_READ)
         {
             lockManager.lockForRead(req.id);
 
             employee* e = findEmployee(database, req.id);
-
-            if (e)
-            {
+            if (e) {
                 res.success = true;
                 res.data = *e;
+                lockedId = req.id;
+                isWriteLock = false;
             }
-            else
-            {
+            else {
                 res.success = false;
+                lockManager.unlockForRead(req.id);
+                strcpy_s(res.message, "ID not found");
             }
-
             WriteFile(hPipe, &res, sizeof(res), nullptr, nullptr);
         }
 
-        if (req.type == RequestType::WRITE)
+        // 2. ЗАПРОС НА МОДИФИКАЦИЮ
+        else if (req.type == RequestType::START_MODIFY)
         {
             lockManager.lockForWrite(req.id);
 
             employee* e = findEmployee(database, req.id);
-
-            if (e)
-            {
-                *e = req.data;
+            if (e) {
                 res.success = true;
                 res.data = *e;
+                lockedId = req.id;
+                isWriteLock = true;
             }
-            else
-            {
+            else {
                 res.success = false;
+                lockManager.unlockForWrite(req.id);
+                strcpy_s(res.message, "ID not found");
             }
-
             WriteFile(hPipe, &res, sizeof(res), nullptr, nullptr);
         }
 
-        if (req.type == RequestType::RELEASE)
+        // 3. ОБНОВЛЕНИЕ ДАННЫХ (только если уже заблокировано)
+        else if (req.type == RequestType::UPDATE_DATA)
         {
-            lockManager.unlockForRead(req.id);
-            lockManager.unlockForWrite(req.id);
+            if (lockedId == req.id && isWriteLock)
+            {
+                employee* e = findEmployee(database, req.id);
+                if (e) {
+                    *e = req.data;
+                    res.success = true;
+                }
+                else {
+                    res.success = false; // Странная ситуация, удалили пока редактировали?
+                }
+            }
+            else {
+                res.success = false;
+                strcpy_s(res.message, "Not locked for write!");
+            }
+            WriteFile(hPipe, &res, sizeof(res), nullptr, nullptr);
+        }
+
+        // 4. СНЯТИЕ БЛОКИРОВКИ
+        else if (req.type == RequestType::RELEASE)
+        {
+            if (lockedId != -1)
+            {
+                if (isWriteLock)
+                    lockManager.unlockForWrite(lockedId);
+                else
+                    lockManager.unlockForRead(lockedId);
+
+                lockedId = -1;
+            }
+            res.success = true;
         }
     }
 
+    FlushFileBuffers(hPipe);
+    DisconnectNamedPipe(hPipe);
     CloseHandle(hPipe);
 }

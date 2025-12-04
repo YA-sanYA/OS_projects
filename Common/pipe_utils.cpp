@@ -6,35 +6,45 @@ void createBinaryFile(const std::string& filename, std::vector<employee>& databa
 {
     for (size_t i = 0; i < database.size(); ++i)
     {
-        std::cout << "Enter ID: ";
+        std::cout << "Employee " << i + 1 << ":\n";
+        std::cout << "  ID: ";
         std::cin >> database[i].num;
-        std::cout << "Enter name: ";
+        std::cout << "  Name: ";
         std::cin >> database[i].name;
-        std::cout << "Enter hours: ";
+        std::cout << "  Hours: ";
         std::cin >> database[i].hours;
     }
+    saveFile(filename, database);
+}
 
+void saveFile(const std::string& filename, const std::vector<employee>& database)
+{
     std::ofstream fout(filename, std::ios::binary);
-    fout.write(reinterpret_cast<char*>(database.data()), database.size() * sizeof(employee));
-    fout.close();
+    if (fout.is_open()) {
+        fout.write(reinterpret_cast<const char*>(database.data()), database.size() * sizeof(employee));
+        fout.close();
+    }
+    else {
+        std::cerr << "Error writing to file!\n";
+    }
 }
 
 void printFile(const std::string& filename)
 {
     std::ifstream fin(filename, std::ios::binary);
-    if (!fin) return;
+    if (!fin) {
+        std::cout << "File not found.\n";
+        return;
+    }
 
-    std::vector<employee> data;
     employee tmp;
+    std::cout << "\n--- File content (" << filename << ") ---\n";
     while (fin.read(reinterpret_cast<char*>(&tmp), sizeof(tmp)))
     {
-        data.push_back(tmp);
+        std::cout << "ID: " << tmp.num << ", Name: " << tmp.name << ", Hours: " << tmp.hours << "\n";
     }
+    std::cout << "-------------------------\n";
     fin.close();
-
-    std::cout << "\nFile content:\n";
-    for (auto& e : data)
-        std::cout << e.num << " " << e.name << " " << e.hours << "\n";
 }
 
 HANDLE createServerPipe()
@@ -58,11 +68,13 @@ void startClients(int clientCount)
         STARTUPINFOA si = { sizeof(si) };
         PROCESS_INFORMATION pi;
 
+        char cmdLine[] = "..\\Client\\Client.exe";
+
         if (!CreateProcessA(
-            "..\\Client\\Client.exe", nullptr, nullptr, nullptr, FALSE,
+            nullptr, cmdLine, nullptr, nullptr, FALSE,
             CREATE_NEW_CONSOLE, nullptr, nullptr, &si, &pi))
         {
-            std::cout << "Failed to start client " << i << "\n";
+            std::cout << "Failed to start Client.exe. Make sure it is compiled and in the same folder.\n";
             continue;
         }
 

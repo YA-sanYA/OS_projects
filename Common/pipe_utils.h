@@ -9,10 +9,11 @@ struct PipeContext
 {
     HANDLE hPipe;
     std::vector<employee>& database;
-    LockManager& lockManager;
+    LockManager* lockManager;
 };
 
 void createBinaryFile(const std::string& filename, std::vector<employee>& database);
+void saveFile(const std::string& filename, const std::vector<employee>& database);
 void printFile(const std::string& filename);
 
 HANDLE createServerPipe();

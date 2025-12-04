@@ -20,11 +20,11 @@ void LockManager::lockForRead(int id)
         {
             locks[id].readerCount++;
             ReleaseMutex(hMutex);
-            break;
+            return;
         }
 
         ReleaseMutex(hMutex);
-        Sleep(100);
+        Sleep(50);
     }
 }
 
@@ -46,11 +46,11 @@ void LockManager::lockForWrite(int id)
         {
             locks[id].isWriting = true;
             ReleaseMutex(hMutex);
-            break;
+            return;
         }
 
         ReleaseMutex(hMutex);
-        Sleep(100);
+        Sleep(50);
     }
 }
 

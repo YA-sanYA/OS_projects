@@ -6,7 +6,6 @@ struct LockInfo
 {
     int readerCount;
     bool isWriting;
-
     LockInfo() : readerCount(0), isWriting(false) {}
 };
 
