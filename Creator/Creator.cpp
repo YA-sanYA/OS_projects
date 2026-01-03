@@ -1,73 +1,51 @@
 ﻿#include <iostream>
-#include <fstream>
 #include <string>
-#include <cstdlib>
 #include <cstring>
-#include <regex>
-#include "employee.h"
+#include <fstream>
+#include "EmployeeService.h"
 
 int main(int argc, char* argv[]) {
     setlocale(LC_ALL, "Russian");
 
     if (argc != 3) {
-        std::cerr << "\nОшибка. Неверное количество аргументов\n";
-        std::cerr << "Использование: Creator <имя_файла> <количество_записей>\n";
+        std::cerr << "Использование: Creator <имя_файла> <кол-во>\n";
         return 1;
     }
 
     std::string filename = argv[1];
-    std::regex pattern(R"(^[^\\/:*?"<>|]+\.[bB][iI][nN]$)");
-    if (!std::regex_match(filename, pattern)) {
-        std::cerr << "Ошибка. Имя файла " << filename << " не корректно\n";
-        return 1;
-    }
+    int count = std::stoi(argv[2]);
 
-    int recordCount = atoi(argv[2]);
-    if (recordCount <= 0) {
-        std::cerr << "\nОшибка. Количество записей должно быть числом больше 0\n";
-        return 1;
-    }
+    std::ofstream(filename, std::ios::binary | std::ios::trunc).close();
 
-    std::ofstream fout(filename, std::ios::binary);
-    if (!fout.is_open()) {
-        std::cerr << "\nОшибка. Не удалось открыть файл " << filename << "\n";
-        return 1;
-    }
+    for (int i = 0; i < count; i++) {
+        employee emp{};
+        std::string inputName;
 
-    for (int i = 0; i < recordCount; i++) {
-        employee empl;
-
-        std::cout << "\nСотрудник #" << (i + 1) << "\n";
-
-        std::cout << "Введите идентификационный номер сотрудника: ";
-        while (!(std::cin >> empl.num) || empl.num < 0) {
-            std::cerr << "Ошибка. Номер сотрудника должен быть неотрицательным числом\n";
+        std::cout << "\nСотрудник #" << (i + 1) << "\nID: ";
+        while (!(std::cin >> emp.num) || !EmployeeService::isValidID(emp.num)) {
+            std::cout << "Ошибка! Введите ID (число >= 0): ";
             std::cin.clear();
-            std::cin.ignore(100000, '\n');
-            std::cerr << "Попробуйте ещё раз: ";
+            std::cin.ignore(10000, '\n');
         }
 
-        std::cout << "Введите имя сотрудника (не более 9 символов): ";
-        std::cin >> empl.name;
-        while (strlen(empl.name) == 0 || strlen(empl.name) >= 10) {
-            std::cerr << "Ошибка. Имя сотрудника должно содержать от 1 до 9 символов\n";
-            std::cerr << "Попробуйте ещё раз: ";
-            std::cin >> empl.name;
+        std::cout << "Имя (до 9 символов): ";
+        std::cin >> inputName;
+        while (!EmployeeService::isValidName(inputName)) {
+            std::cout << "Ошибка! Имя должно быть от 1 до 9 символов: ";
+            std::cin >> inputName;
         }
+        strncpy_s(emp.name, inputName.c_str(), _TRUNCATE);
 
-        std::cout << "Введите количество отработанных часов сотрудника: ";
-        while (!(std::cin >> empl.hours) || empl.hours < 0) {
-            std::cerr << "Ошибка. Количество часов должно быть неотрицательным числом\n";
+        std::cout << "Часы: ";
+        while (!(std::cin >> emp.hours) || !EmployeeService::isValidHours(emp.hours)) {
+            std::cout << "Ошибка! Введите часы (>= 0): ";
             std::cin.clear();
-            std::cin.ignore(100000, '\n');
-            std::cerr << "Попробуйте ещё раз: ";
+            std::cin.ignore(10000, '\n');
         }
 
-        fout.write(reinterpret_cast<char*>(&empl), sizeof(employee));
+        EmployeeService::saveEmployee(filename, emp);
     }
 
-    fout.close();
-
-    std::cout << "\nФайл " << filename << " успешно создан.\n";
+    std::cout << "Файл создан.\n";
     return 0;
 }
