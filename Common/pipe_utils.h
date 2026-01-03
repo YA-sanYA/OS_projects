@@ -5,8 +5,7 @@
 #include "common.h"
 #include "locking.h"
 
-struct PipeContext
-{
+struct PipeContext {
     HANDLE hPipe;
     std::vector<employee>& database;
     LockManager* lockManager;
@@ -17,4 +16,4 @@ void saveFile(const std::string& filename, const std::vector<employee>& database
 void printFile(const std::string& filename);
 
 HANDLE createServerPipe();
-void startClients(int clientCount);
+void startClients(int clientCount, const std::wstring& clientPath);

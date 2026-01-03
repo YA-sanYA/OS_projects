@@ -6,6 +6,7 @@ project(CommonLib)
 add_library(Common STATIC
     common.h
     locking.cpp
+    locking.h
     pipe_utils.cpp
     server_utils.cpp
 )

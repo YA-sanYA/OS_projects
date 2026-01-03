@@ -1,115 +1,65 @@
 #include "server_utils.h"
 #include <iostream>
 
-employee* findEmployee(std::vector<employee>& database, int id)
-{
-    for (auto& e : database)
-    {
-        if (e.num == id)
-            return &e;
-    }
-    return nullptr;
-}
+DWORD WINAPI handleClient(LPVOID param) {
+    PipeContext* ctx = static_cast<PipeContext*>(param);
+    HANDLE hPipe = ctx->hPipe;
+    auto& db = ctx->database;
+    LockManager& lm = *ctx->lockManager;
 
-void handleClient(HANDLE hPipe, std::vector<employee>& database, LockManager& lockManager)
-{
     Request req;
     Response res;
     int lockedId = -1;
-    bool isWriteLock = false;
+    bool writing = false;
+    DWORD cb;
 
-    while (true)
-    {
-        DWORD readBytes = 0;
-        BOOL result = ReadFile(hPipe, &req, sizeof(req), &readBytes, NULL);
+    while (ReadFile(hPipe, &req, sizeof(req), &cb, NULL) && cb > 0) {
+        if (req.type == RequestType::EXIT) break;
 
-        if (!result || readBytes == 0 || req.type == RequestType::EXIT)
-        {
+        if (req.type == RequestType::START_READ || req.type == RequestType::START_MODIFY) {
+            if (req.type == RequestType::START_READ) lm.lockForRead(req.id);
+            else lm.lockForWrite(req.id);
+
+            employee* e = nullptr;
+            for (auto& item : db) if (item.num == req.id) e = &item;
+
+            if (e) {
+                res.success = true;
+                res.data = *e;
+                lockedId = req.id;
+                writing = (req.type == RequestType::START_MODIFY);
+            }
+            else {
+                res.success = false;
+                strcpy_s(res.message, "ID not found");
+                if (req.type == RequestType::START_READ) lm.unlockForRead(req.id);
+                else lm.unlockForWrite(req.id);
+            }
+            WriteFile(hPipe, &res, sizeof(res), &cb, NULL);
+        }
+        else if (req.type == RequestType::UPDATE_DATA) {
+            if (lockedId == req.id && writing) {
+                for (auto& item : db) if (item.num == req.id) item = req.data;
+                res.success = true;
+            }
+            else {
+                res.success = false;
+                strcpy_s(res.message, "Access denied");
+            }
+            WriteFile(hPipe, &res, sizeof(res), &cb, NULL);
+        }
+        else if (req.type == RequestType::RELEASE) {
             if (lockedId != -1) {
-                if (isWriteLock) lockManager.unlockForWrite(lockedId);
-                else lockManager.unlockForRead(lockedId);
-            }
-            break;
-        }
-
-        // 1. ЗАПРОС НА ЧТЕНИЕ
-        if (req.type == RequestType::START_READ)
-        {
-            lockManager.lockForRead(req.id);
-
-            employee* e = findEmployee(database, req.id);
-            if (e) {
-                res.success = true;
-                res.data = *e;
-                lockedId = req.id;
-                isWriteLock = false;
-            }
-            else {
-                res.success = false;
-                lockManager.unlockForRead(req.id);
-                strcpy_s(res.message, "ID not found");
-            }
-            WriteFile(hPipe, &res, sizeof(res), nullptr, nullptr);
-        }
-
-        // 2. ЗАПРОС НА МОДИФИКАЦИЮ
-        else if (req.type == RequestType::START_MODIFY)
-        {
-            lockManager.lockForWrite(req.id);
-
-            employee* e = findEmployee(database, req.id);
-            if (e) {
-                res.success = true;
-                res.data = *e;
-                lockedId = req.id;
-                isWriteLock = true;
-            }
-            else {
-                res.success = false;
-                lockManager.unlockForWrite(req.id);
-                strcpy_s(res.message, "ID not found");
-            }
-            WriteFile(hPipe, &res, sizeof(res), nullptr, nullptr);
-        }
-
-        // 3. ОБНОВЛЕНИЕ ДАННЫХ (только если уже заблокировано)
-        else if (req.type == RequestType::UPDATE_DATA)
-        {
-            if (lockedId == req.id && isWriteLock)
-            {
-                employee* e = findEmployee(database, req.id);
-                if (e) {
-                    *e = req.data;
-                    res.success = true;
-                }
-                else {
-                    res.success = false; // Странная ситуация, удалили пока редактировали?
-                }
-            }
-            else {
-                res.success = false;
-                strcpy_s(res.message, "Not locked for write!");
-            }
-            WriteFile(hPipe, &res, sizeof(res), nullptr, nullptr);
-        }
-
-        // 4. СНЯТИЕ БЛОКИРОВКИ
-        else if (req.type == RequestType::RELEASE)
-        {
-            if (lockedId != -1)
-            {
-                if (isWriteLock)
-                    lockManager.unlockForWrite(lockedId);
-                else
-                    lockManager.unlockForRead(lockedId);
-
+                if (writing) lm.unlockForWrite(lockedId);
+                else lm.unlockForRead(lockedId);
                 lockedId = -1;
             }
-            res.success = true;
         }
     }
 
     FlushFileBuffers(hPipe);
     DisconnectNamedPipe(hPipe);
     CloseHandle(hPipe);
+    delete ctx;
+    return 0;
 }

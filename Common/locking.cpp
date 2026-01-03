@@ -1,62 +1,82 @@
 #include "locking.h"
 
-LockManager::LockManager()
-{
-    hMutex = CreateMutex(NULL, FALSE, NULL);
+EmployeeLock::EmployeeLock() : readers(0), writing(false) {
+    InitializeCriticalSection(&cs);
+    InitializeConditionVariable(&cv);
 }
 
-LockManager::~LockManager()
-{
-    CloseHandle(hMutex);
+EmployeeLock::~EmployeeLock() {
+    DeleteCriticalSection(&cs);
 }
 
-void LockManager::lockForRead(int id)
-{
-    while (true)
-    {
-        WaitForSingleObject(hMutex, INFINITE);
+LockManager::LockManager() {
+    InitializeCriticalSection(&managerCS);
+}
 
-        if (!locks[id].isWriting)
-        {
-            locks[id].readerCount++;
-            ReleaseMutex(hMutex);
-            return;
-        }
-
-        ReleaseMutex(hMutex);
-        Sleep(50);
+LockManager::~LockManager() {
+    EnterCriticalSection(&managerCS);
+    for (auto& pair : locks) {
+        delete pair.second;
     }
+    locks.clear();
+    LeaveCriticalSection(&managerCS);
+    DeleteCriticalSection(&managerCS);
 }
 
-void LockManager::unlockForRead(int id)
-{
-    WaitForSingleObject(hMutex, INFINITE);
-    if (locks[id].readerCount > 0)
-        locks[id].readerCount--;
-    ReleaseMutex(hMutex);
-}
+EmployeeLock* LockManager::GetLock(int id) {
+    EnterCriticalSection(&managerCS);
 
-void LockManager::lockForWrite(int id)
-{
-    while (true)
-    {
-        WaitForSingleObject(hMutex, INFINITE);
-
-        if (!locks[id].isWriting && locks[id].readerCount == 0)
-        {
-            locks[id].isWriting = true;
-            ReleaseMutex(hMutex);
-            return;
-        }
-
-        ReleaseMutex(hMutex);
-        Sleep(50);
+    if (locks.find(id) == locks.end()) {
+        locks[id] = new EmployeeLock();
     }
+    EmployeeLock* l = locks[id];
+
+    LeaveCriticalSection(&managerCS);
+    return l;
 }
 
-void LockManager::unlockForWrite(int id)
-{
-    WaitForSingleObject(hMutex, INFINITE);
-    locks[id].isWriting = false;
-    ReleaseMutex(hMutex);
+void LockManager::lockForRead(int id) {
+    EmployeeLock* l = GetLock(id);
+    EnterCriticalSection(&l->cs);
+
+    while (l->writing) {
+        SleepConditionVariableCS(&l->cv, &l->cs, INFINITE);
+    }
+    l->readers++;
+
+    LeaveCriticalSection(&l->cs);
+}
+
+void LockManager::unlockForRead(int id) {
+    EmployeeLock* l = GetLock(id);
+    EnterCriticalSection(&l->cs);
+
+    l->readers--;
+    if (l->readers == 0) {
+        WakeAllConditionVariable(&l->cv);
+    }
+
+    LeaveCriticalSection(&l->cs);
+}
+
+void LockManager::lockForWrite(int id) {
+    EmployeeLock* l = GetLock(id);
+    EnterCriticalSection(&l->cs);
+
+    while (l->writing || l->readers > 0) {
+        SleepConditionVariableCS(&l->cv, &l->cs, INFINITE);
+    }
+    l->writing = true;
+
+    LeaveCriticalSection(&l->cs);
+}
+
+void LockManager::unlockForWrite(int id) {
+    EmployeeLock* l = GetLock(id);
+    EnterCriticalSection(&l->cs);
+
+    l->writing = false;
+    WakeAllConditionVariable(&l->cv);
+
+    LeaveCriticalSection(&l->cs);
 }

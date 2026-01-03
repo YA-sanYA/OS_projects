@@ -1,13 +1,8 @@
 #pragma once
 #include <windows.h>
+#include <vector>
 #include "common.h"
 #include "locking.h"
-#include <vector>
+#include "pipe_utils.h"
 
-employee* findEmployee(std::vector<employee>& database, int id);
-
-void handleClient(
-    HANDLE hPipe,
-    std::vector<employee>& database,
-    LockManager& lockManager
-);
+DWORD WINAPI handleClient(LPVOID param);
