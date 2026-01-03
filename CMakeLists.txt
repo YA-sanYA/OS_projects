@@ -10,3 +10,6 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 add_subdirectory(Common)
 add_subdirectory(Server)
 add_subdirectory(Client)
+add_subdirectory(Test)
+
+enable_testing()
