@@ -1,77 +1,42 @@
-#include "pch.h"
 #include "threads.h"
-#include <iostream>
 
-DWORD WINAPI min_max(LPVOID lpParam) {
-    ThreadData* data = (ThreadData*)lpParam;
+void min_max_logic(ThreadData* data) {
+    if (!data || data->arr.empty()) return;
 
-    for (int i = 0; i < data->size; i++) {
-        int currentElement = data->arr[i];
-
-        if (data->min > currentElement) {
-            data->min = currentElement;
+    for (int x : data->arr) {
+        if (x < data->min_val) {
+            data->min_val = x;
         }
         Sleep(7);
 
-        if (data->max < currentElement) {
-            data->max = currentElement;
+        if (x > data->max_val) {
+            data->max_val = x;
         }
         Sleep(7);
     }
-
-    std::cout << "min = " << data->min << ", max = " << data->max << "\n";
-    std::cout.flush();
-    return 0;
+    std::cout << "[min_max] Min: " << data->min_val << ", Max: " << data->max_val << std::endl;
 }
 
-DWORD WINAPI average(LPVOID lpParam) {
-    ThreadData* data = (ThreadData*)lpParam;
+void average_logic(ThreadData* data) {
+    if (!data || data->arr.empty()) return;
 
-    int sum = 0;
-
-    for (int i = 0; i < data->size; i++) {
-        sum += data->arr[i];
+    long long sum = 0;
+    for (int x : data->arr) {
+        sum += x;
         Sleep(12);
     }
 
-    data->average = sum / data->size;
+    data->average = static_cast<int>(sum / data->arr.size());
+    std::cout << "[average] Average: " << data->average << std::endl;
+}
 
-    std::cout << "Average = " << data->average << "\n";
-    std::cout.flush();
+// Обертки просто вызывают логику
+DWORD WINAPI min_max_win(LPVOID lpParam) {
+    min_max_logic(static_cast<ThreadData*>(lpParam));
     return 0;
 }
 
-void min_max_thread(ThreadData *data) {
-    for (int i = 0; i < data->size; i++) {
-        int currentElement = data->arr[i];
-
-        if (data->min > currentElement) {
-            data->min = currentElement;
-        }
-        Sleep(7);
-
-        if (data->max < currentElement) {
-            data->max = currentElement;
-        }
-        Sleep(7);
-    }
-
-    std::cout << "min = " << data->min << ", max = " << data->max << "\n";
-    std::cout.flush();
-    return;
-}
-
-void average_thread(ThreadData* data) {
-    int sum = 0;
-
-    for (int i = 0; i < data->size; i++) {
-        sum += data->arr[i];
-        Sleep(12);
-    }
-
-    data->average = sum / data->size;
-
-    std::cout << "Average = " << data->average << "\n";
-    std::cout.flush();
-    return;
+DWORD WINAPI average_win(LPVOID lpParam) {
+    average_logic(static_cast<ThreadData*>(lpParam));
+    return 0;
 }

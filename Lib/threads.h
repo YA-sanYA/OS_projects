@@ -1,10 +1,11 @@
 #pragma once
-
 #include <windows.h>
 #include "utils.h"
 
-DWORD WINAPI min_max(LPVOID);
-DWORD WINAPI average(LPVOID);
+// Единые функции логики
+void min_max_logic(ThreadData* data);
+void average_logic(ThreadData* data);
 
-void min_max_thread(ThreadData*);
-void average_thread(ThreadData*);
+// Обертки для WinAPI
+DWORD WINAPI min_max_win(LPVOID lpParam);
+DWORD WINAPI average_win(LPVOID lpParam);

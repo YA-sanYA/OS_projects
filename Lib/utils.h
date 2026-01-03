@@ -1,23 +1,20 @@
 #pragma once
 
+#ifndef NOMINMAX
+#define NOMINMAX // Запрещаем макросы min и max из windows.h
+#endif
+
 #include <windows.h>
+#include <vector>
 #include <iostream>
+#include <limits>
 
 struct ThreadData {
-    int* arr;
-    int size, average, min, max;
+    std::vector<int> arr;
+    int average = 0;
+    int min_val = (std::numeric_limits<int>::max)();
+    int max_val = (std::numeric_limits<int>::min)();
 
-public:
-
-    ThreadData() {
-        size = 0;
-        average = 0;
-        min = INT_MAX;
-        max = INT_MIN;
-    }
-
-    friend std::istream& operator>>(std::istream&, ThreadData&);
-    friend std::ostream& operator<<(std::ostream&, const ThreadData&);
-
-    ~ThreadData();
+    friend std::istream& operator>>(std::istream& in, ThreadData& data);
+    friend std::ostream& operator<<(std::ostream& out, const ThreadData& data);
 };
