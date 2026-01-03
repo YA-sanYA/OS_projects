@@ -11,6 +11,8 @@ endif()
 
 project ("OS_lab3")
 
+enable_testing() 
+
 include(FetchContent)
 FetchContent_Declare(
   googletest
