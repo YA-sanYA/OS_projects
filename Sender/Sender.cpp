@@ -2,137 +2,87 @@
 #include <iostream>
 #include <string>
 #include <vector>
-
+#include <io.h>
+#include <fcntl.h>
 #include "message_queue.h"
 #include "sync_objects.h"
 
-void print_usage(const char* exe) {
-    std::wcout << L"Usage: " << exe << L" <queue_file> <sender_index>\n";
-    std::wcout << L"  queue_file    - имя бинарного файла очереди (тот же, что у Receiver)\n";
-    std::wcout << L"  sender_index  - индекс этого Sender (0..N-1), нужен для события готовности\n";
+std::string WStringToString(const std::wstring& wstr) {
+    if (wstr.empty()) return std::string();
+    int size_needed = WideCharToMultiByte(CP_UTF8, 0, &wstr[0], (int)wstr.size(), NULL, 0, NULL, NULL);
+    std::string strTo(size_needed, 0);
+    WideCharToMultiByte(CP_UTF8, 0, &wstr[0], (int)wstr.size(), &strTo[0], size_needed, NULL, NULL);
+    return strTo;
 }
 
 int wmain(int argc, wchar_t* argv[]) {
+    _setmode(_fileno(stdout), _O_U8TEXT);
+    _setmode(_fileno(stdin), _O_U8TEXT);
+
     if (argc < 3) {
-        print_usage("Sender");
+        std::wcout << L"Ошибка: недостаточно аргументов." << std::endl;
         return 1;
     }
 
     std::wstring wfilename = argv[1];
-    int senderIndex = 0;
-    try {
-        senderIndex = std::stoi(std::wstring(argv[2]));
-    }
-    catch (...) {
-        std::wcout << L"Invalid sender index\n";
-        return 1;
-    }
+    int index = std::stoi(argv[2]);
 
     HANDLE hMutex = OpenMainMutex();
-    if (!hMutex) {
-        std::wcout << L"OpenMainMutex failed. Убедитесь, что Receiver создал мьютекс.\n";
-        return 1;
-    }
-
     HANDLE hEmpty = OpenEmptySemaphore();
-    if (!hEmpty) {
-        std::wcout << L"OpenEmptySemaphore failed. Убедитесь, что Receiver создал семафор пустых слотов.\n";
-        CloseHandle(hMutex);
-        return 1;
-    }
-
     HANDLE hFull = OpenFullSemaphore();
-    if (!hFull) {
-        std::wcout << L"OpenFullSemaphore failed. Убедитесь, что Receiver создал семафор заполненных слотов.\n";
-        CloseHandle(hMutex);
-        CloseHandle(hEmpty);
+    HANDLE hReady = OpenSenderReadyEvent(index);
+
+    if (!hMutex || !hEmpty || !hFull || !hReady) {
+        std::wcout << L"Sender " << index << L": Ошибка открытия объектов синхронизации." << std::endl;
         return 1;
     }
 
-    // Открываем событие готовности, которое Receiver создал заранее.
-    HANDLE hReadyEvent = OpenSenderReadyEvent(senderIndex);
-    if (!hReadyEvent) {
-        std::wcout << L"OpenSenderReadyEvent failed. Убедитесь, что Receiver создал событие для этого индекса.\n";
-        CloseHandle(hMutex);
-        CloseHandle(hEmpty);
-        CloseHandle(hFull);
-        return 1;
-    }
+    SetEvent(hReady);
 
-    if (!SetEvent(hReadyEvent)) {
-        std::wcout << L"SetEvent(sender ready) failed\n";
-        CloseHandle(hMutex);
-        CloseHandle(hEmpty);
-        CloseHandle(hFull);
-        CloseHandle(hReadyEvent);
-        return 1;
-    }
+    std::wcout << L"Sender " << index << L" запущен. Файл: " << wfilename << std::endl;
 
-    // Интерактивное меню для отправки сообщений
-    std::wcout << L"Sender[" << senderIndex << L"] connected to queue: " << wfilename << L"\n";
-
-    std::string line;
     while (true) {
-        std::wcout << L"\n1 - send message\n2 - exit\n> ";
-        int cmd;
-        if (!(std::cin >> cmd)) {
-            std::cin.clear();
-            std::string dummy;
-            std::getline(std::cin, dummy);
-            continue;
-        }
-        std::getline(std::cin, line);
+        std::wcout << L"\n1 - Отправить сообщение\n2 - Выход\n> ";
 
-        if (cmd == 1) {
-            DWORD waitRes = WaitForSingleObject(hEmpty, 0);
-            if (waitRes == WAIT_TIMEOUT) {
-                std::wcout << L"Нет свободных слотов. Sender завершает работу.\n";
-                break;
-            }
-            else if (waitRes != WAIT_OBJECT_0) {
-                std::wcout << L"Ошибка ожидания семафора empty. Код: " << GetLastError() << L"\n";
-                break;
+        std::wstring input;
+        if (!std::getline(std::wcin, input)) break;
+        if (input.empty()) continue;
+
+        if (input == L"1") {
+            std::wcout << L"Введите текст (до 20 символов): ";
+            std::wstring wmsg;
+            std::getline(std::wcin, wmsg);
+
+            if (wmsg.length() >= MAX_MSG_LEN) {
+                wmsg = wmsg.substr(0, MAX_MSG_LEN - 1);
             }
 
-            std::wcout << L"Enter message (max " << MAX_MSG_LEN - 1 << L" visible chars): ";
-            std::string msg;
-            std::getline(std::cin, msg);
+            std::wcout << L"Ожидание места в очереди..." << std::endl;
 
-            if ((int)msg.size() > MAX_MSG_LEN) msg.resize(MAX_MSG_LEN);
+            WaitForSingleObject(hEmpty, INFINITE);
+            WaitForSingleObject(hMutex, INFINITE);
 
-            waitRes = WaitForSingleObject(hMutex, INFINITE);
-            if (waitRes != WAIT_OBJECT_0) {
-                std::wcout << L"WaitForSingleObject(mutex) failed\n";
-                ReleaseSemaphore(hEmpty, 1, nullptr);
-                break;
+            std::string msg = WStringToString(wmsg);
+            if (WriteMessage(wfilename, msg)) {
+                std::wcout << L"Сообщение отправлено." << std::endl;
+            }
+            else {
+                std::wcout << L"Ошибка записи в файл." << std::endl;
             }
 
-            bool ok = WriteMessage(wfilename, msg);
             ReleaseMutex(hMutex);
+            ReleaseSemaphore(hFull, 1, NULL);
 
-            if (!ok) {
-                std::wcout << L"WriteMessage failed\n";
-                ReleaseSemaphore(hEmpty, 1, nullptr);
-                break;
-            }
-
-            if (!ReleaseSemaphore(hFull, 1, nullptr)) {
-                std::wcout << L"ReleaseSemaphore(full) failed\n";
-                break;
-            }
-
-            std::wcout << L"Message sent.\n";
         }
-        else if (cmd == 2) {
-            std::wcout << L"Exiting sender.\n";
+        else if (input == L"2") {
             break;
         }
     }
 
-    // Закрываем дескрипторы
     CloseHandle(hMutex);
     CloseHandle(hEmpty);
     CloseHandle(hFull);
-    CloseHandle(hReadyEvent);
+    CloseHandle(hReady);
+
     return 0;
 }
